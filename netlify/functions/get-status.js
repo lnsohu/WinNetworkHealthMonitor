@@ -1,14 +1,27 @@
-﻿// Netlify Function: Returns the latest status map collected by health-report
-const kioskStore = global.__kioskStatusStore || {};
+﻿// Netlify Function: Returns the latest status from KV Store
+const { getStore } = require("@netlify/blobs");
 
 exports.handler = async function (event, context) {
-  // Simple GET endpoint that returns the current in-memory store
+  const store = getStore({
+    name: "kiosk-status"
+  });
+
   try {
-    const result = Object.entries(kioskStore).map(([id, entry]) => ({
-      id,
-      receivedAt: entry.receivedAt,
-      payload: entry.payload
-    }));
+    // List all entries in the store
+    const entries = await store.list();
+    const result = [];
+    
+    // Get each entry's data
+    for (const key of entries) {
+      const data = await store.get(key);
+      if (data) {
+        result.push({
+          id: key,
+          receivedAt: data.receivedAt,
+          payload: data.payload
+        });
+      }
+    }
 
     return {
       statusCode: 200,

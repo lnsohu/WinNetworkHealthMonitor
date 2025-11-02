@@ -1,0 +1,7 @@
+{
+  "name": "network-health-monitor-functions",
+  "version": "1.0.0",
+  "dependencies": {
+    "@netlify/blobs": "^3.0.1"
+  }
+}

@@ -1,11 +1,10 @@
-﻿// Netlify Function: Accepts POST from kiosks and stores last-seen status in memory (MVP)
-// Note: This uses in-process memory to hold the latest status per kiosk. It's ephemeral
-// and will be lost when the function container is recycled. For production, use a DB.
-
-const kioskStore = global.__kioskStatusStore || {};
-global.__kioskStatusStore = kioskStore;
+﻿// Netlify Function: Accepts POST from kiosks and stores last-seen status in KV Store
+const { getStore } = require("@netlify/blobs");
 
 exports.handler = async function (event, context) {
+  const store = getStore({
+    name: "kiosk-status"
+  });
   // Allow GET to return the in-memory store (ephemeral). POST to store updates.
   if (event.httpMethod === 'GET') {
     // Temporarily disabled API key check for testing
@@ -25,11 +24,12 @@ exports.handler = async function (event, context) {
     const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
     const now = new Date().toISOString();
 
-    kioskStore[id] = {
+    const data = {
       receivedAt: now,
       payload: body
     };
 
+    await store.set(id, data);
     console.log(`Stored status for ${id} at ${now}`);
 
     return {
