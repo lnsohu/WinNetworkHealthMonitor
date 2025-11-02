@@ -1,10 +1,10 @@
-// Netlify Function: Returns the latest status map collected by health-report
-const store = global.__kioskStatusStore || {};
+﻿// Netlify Function: Returns the latest status map collected by health-report
+const kioskStore = global.__kioskStatusStore || {};
 
 exports.handler = async function (event, context) {
   // Simple GET endpoint that returns the current in-memory store
   try {
-    const result = Object.entries(store).map(([id, entry]) => ({
+    const result = Object.entries(kioskStore).map(([id, entry]) => ({
       id,
       receivedAt: entry.receivedAt,
       payload: entry.payload
