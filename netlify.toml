@@ -1,7 +1,10 @@
-# normalized
 [build]
 publish = "web"
 functions = "netlify/functions"
+command = "npm install"
 
 [dev]
 functions = "netlify/functions"
+
+[[plugins]]
+package = "@netlify/plugin-functions-install-core"
