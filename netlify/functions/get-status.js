@@ -21,12 +21,12 @@ exports.handler = async function (event, context) {
     const store = await getStore(storeConfig);
     console.log('KV Store initialized');
     
-    const keys = await store.keys();
-    console.log('Found keys:', keys);
+    const { items } = await store.list();
+    console.log('Found items:', items);
     console.log('Found entries:', list);
     
     const result = [];
-    for (const key of keys) {
+    for (const { key } of items) {
       const data = await store.get(key);
       if (data) {
         const text = await data.text();
