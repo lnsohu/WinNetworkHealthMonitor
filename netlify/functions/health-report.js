@@ -1,83 +1,78 @@
-﻿// Netlify Function: Accepts POST from kiosks and stores their latest status
-const { getStore } = require("@netlify/blobs");
+﻿// netlify/functions/health-report/health-report.js
+exports.handler = async function(event, context) {
+    // 添加 CORS 头
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    };
 
-let statusCache = {};
-
-exports.handler = async function (event, context) {
-  // GET request returns the in-memory latest status of all devices
-    if (event.httpMethod === 'GET') {
-      try {
-        const entries = await store.list();
-        const result = [];
-        
-        for (const key of entries) {
-          const data = await store.get(key);
-          if (data) {
-            result.push({
-              id: key,
-              ...data
-            });
-          }
-        }
-
+    // 处理预检请求
+    if (event.httpMethod === 'OPTIONS') {
         return {
-          statusCode: 200,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ok: true, results: result })
+            statusCode: 200,
+            headers,
+            body: ''
         };
-      } catch (err) {
-        console.error('GET operation failed:', err);
-        return { 
-          statusCode: 500, 
-          body: JSON.stringify({ error: 'Failed to retrieve data', details: err.message }) 
-        };
-      }
     }
 
     if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: 'Method Not Allowed' };
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Method Not Allowed' })
+        };
     }
-
+    
     try {
-      const body = JSON.parse(event.body || '{}');
-      const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
-      const now = new Date().toISOString();
-
-      const data = {
-        receivedAt: now,
-        payload: body
-      };
-      await store.set(id, JSON.stringify(data));
-      console.log(`Stored status for ${id} at ${now}`);
-
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: true, id, receivedAt: now })
-      };
-    } catch (err) {
-      console.error('Failed to process POST:', err);
-      console.log('Error stack:', err.stack);
-      return { 
-        statusCode: 400, 
-        body: JSON.stringify({ 
-          error: 'Bad Request', 
-          message: err.message,
-          stack: err.stack 
-        }) 
-      };
+        console.log('Received health report');
+        
+        let healthData;
+        try {
+            healthData = JSON.parse(event.body);
+        } catch (parseError) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Invalid JSON' })
+            };
+        }
+        
+        // 简单的数据验证
+        if (!healthData.Device || !healthData.Timestamp) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Missing required fields' })
+            };
+        }
+        
+        // 记录接收到的数据
+        console.log('Device:', healthData.Device);
+        console.log('Location:', healthData.Location);
+        console.log('Has Internet:', healthData.InternetConnectivity?.HasInternet);
+        console.log('VPN Connected:', healthData.VPNStatus?.Connected);
+        
+        // 成功响应
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ 
+                message: 'Health report received successfully',
+                device: healthData.Device,
+                timestamp: healthData.Timestamp
+            })
+        };
+    } catch (error) {
+        console.error('Function error:', error);
+        
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ 
+                error: 'Internal server error',
+                details: error.message 
+            })
+        };
     }
-  } catch (err) {
-    console.error('Failed to initialize or use KV store:', err);
-    console.log('Error stack:', err.stack);
-    return { 
-      statusCode: 500, 
-      body: JSON.stringify({ 
-        error: 'Internal Server Error', 
-        message: err.message,
-        stack: err.stack
-      }) 
-    };
-  }
 };
-
