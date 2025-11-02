@@ -5,11 +5,7 @@ exports.handler = async function (event, context) {
   console.log('Received request:', event.httpMethod);
   
   try {
-    console.log('Creating KV Store with context:', context);
-    const store = getStore({
-      name: "kiosk-status",
-      siteID: context.site.id
-    });
+    const store = getStore("kiosk-status");
     console.log('KV Store initialized');
 
     // Allow GET to return the current store state
@@ -51,12 +47,7 @@ exports.handler = async function (event, context) {
       const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
       const now = new Date().toISOString();
 
-      const data = {
-        receivedAt: now,
-        payload: body
-      };
-
-      await store.set(id, JSON.stringify(data));
+      await store.set(id, body);
       console.log(`Stored status for ${id} at ${now}`);
 
       return {

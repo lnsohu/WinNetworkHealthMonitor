@@ -5,11 +5,7 @@ exports.handler = async function (event, context) {
   console.log('Received status request');
   
   try {
-    console.log('Creating KV Store with context:', context);
-    const store = getStore({
-      name: "kiosk-status",
-      siteID: context.site.id
-    });
+    const store = getStore("kiosk-status");
     console.log('KV Store initialized');
 
     const entries = await store.list();
@@ -19,15 +15,10 @@ exports.handler = async function (event, context) {
     for (const key of entries) {
       const data = await store.get(key);
       if (data) {
-        try {
-          const parsedData = JSON.parse(data);
-          result.push({
-            id: key,
-            ...parsedData
-          });
-        } catch (parseErr) {
-          console.error(`Failed to parse data for ${key}:`, parseErr);
-        }
+        result.push({
+          id: key,
+          ...data
+        });
       }
     }
 
