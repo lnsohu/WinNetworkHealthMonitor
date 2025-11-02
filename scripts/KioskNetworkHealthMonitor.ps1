@@ -55,12 +55,11 @@ function Get-CoreNetworkAdapters {
         }
     }
     
-    # 3. 查找OpenVPN适配器（只找活动的）
+    # 3. 查找OpenVPN适配器（显示所有匹配的，以便在 CORE 中始终能看到 OpenVPN 行，无论 Up/Down）
     $OpenVPNAdapters = Get-NetAdapter | Where-Object { 
         ($_.InterfaceDescription -like "*TAP-Windows*" -or 
          $_.InterfaceDescription -like "*TUN*" -or
-         $_.Name -like "*OpenVPN*") -and
-        $_.Status -eq 'Up'
+         $_.Name -like "*OpenVPN*")
     } | Sort-Object Status -Descending | Select-Object -First 1
     
     # 组装核心适配器列表
@@ -249,6 +248,22 @@ function Get-DetailedNetworkStatus {
             }
         }
 
+        # Fallback 检测：如果没有通过路由前缀检测到 VPN，但存在 OpenVPN 适配器为 Up 且有有效 IPv4，则也视为已连接
+        if (-not $VPNRouteFound) {
+            $VPNAdapter = $CoreAdapters | Where-Object { $_.Type -eq "OPENVPN" -and $_.Status -eq 'Up' } | Select-Object -First 1
+            if ($VPNAdapter -and $VPNAdapter.IPAddress -and $VPNAdapter.IPAddress -ne "No IP" -and $VPNAdapter.IPAddress -notlike "169.254.*") {
+                $VPNRouteFound = $true
+                $VPNAdapterInfo = [PSCustomObject]@{
+                    Name = $VPNAdapter.Name
+                    Description = $VPNAdapter.Description
+                    Status = $VPNAdapter.Status
+                    IPAddress = $VPNAdapter.IPAddress
+                    DNSServers = $VPNAdapter.DNSServers
+                }
+                $VPNSubnetDetected = "detected-by-adapter-ip"
+            }
+        }
+
         # 组装详细状态对象
         $DetailedStatus = [PSCustomObject]@{
             Timestamp        = $HKTime.ToString("yyyy-MM-dd HH:mm:ss")
@@ -377,19 +392,7 @@ function Show-DetailedStatus {
         Write-Host ""
     }
     
-    # 显示VPN状态
-    Write-Host "OPENVPN STATUS:" -ForegroundColor Yellow
-    Write-Host "  Connected: $($StatusData.VPNStatus.Connected)"
-    if ($StatusData.VPNStatus.Connected) {
-        Write-Host "  Detected Subnet: $($StatusData.VPNStatus.DetectedSubnet)"
-        if ($StatusData.VPNStatus.AdapterInfo) {
-            Write-Host "  VPN Adapter: $($StatusData.VPNStatus.AdapterInfo.Name)"
-            Write-Host "  VPN IP Address: $($StatusData.VPNStatus.AdapterInfo.IPAddress)" -ForegroundColor Green
-            Write-Host "  VPN DNS Servers: $($StatusData.VPNStatus.AdapterInfo.DNSServers)"
-        }
-    } else {
-        Write-Host "  VPN Route: Not detected"
-    }
+    # NOTE: OPENVPN STATUS output intentionally removed per user request (kept other sections)
     
     if ($StatusData.Error) {
         Write-Host ""
