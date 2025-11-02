@@ -2,18 +2,28 @@
 const { getStore } = require("@netlify/blobs");
 
 exports.handler = async function (event, context) {
-  console.log('Received request:', event.httpMethod);
+    console.log('Received request:', event.httpMethod);
+    console.log('Environment:', {
+      SITE_ID: process.env.SITE_ID,
+      NETLIFY_API_TOKEN: process.env.NETLIFY_API_TOKEN ? '(set)' : '(not set)',
+      NODE_ENV: process.env.NODE_ENV
+    });
   
   try {
     // Note: In production, these values are automatically provided by Netlify
-    const store = getStore({
-      name: "kiosk-status",
-      siteID: process.env.SITE_ID || "winnetworkhealthmonitor",
-      token: process.env.NETLIFY_API_TOKEN
-    });
-    console.log('KV Store initialized');
-
-    // Allow GET to return the current store state
+    const storeConfig = {
+      name: "kiosk-status"
+    };
+    
+    // Only add these if we're not in the Netlify environment
+    if (!process.env.NETLIFY) {
+      storeConfig.siteID = process.env.SITE_ID || "winnetworkhealthmonitor";
+      storeConfig.token = process.env.NETLIFY_API_TOKEN;
+    }
+    
+    console.log('Store config:', { ...storeConfig, token: storeConfig.token ? '(set)' : '(not set)' });
+    const store = getStore(storeConfig);
+    console.log('KV Store initialized');    // Allow GET to return the current store state
     if (event.httpMethod === 'GET') {
       try {
         const entries = await store.list();
