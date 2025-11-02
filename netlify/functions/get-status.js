@@ -2,24 +2,30 @@
 const { getStore } = require("@netlify/blobs");
 
 exports.handler = async function (event, context) {
-  const store = getStore({
-    name: "kiosk-status"
-  });
-
+  console.log('Received status request');
+  
   try {
-    // List all entries in the store
+    const store = getStore({
+      name: "kiosk-status"
+    });
+    console.log('KV Store initialized');
+
     const entries = await store.list();
-    const result = [];
+    console.log('Found entries:', entries);
     
-    // Get each entry's data
+    const result = [];
     for (const key of entries) {
       const data = await store.get(key);
       if (data) {
-        result.push({
-          id: key,
-          receivedAt: data.receivedAt,
-          payload: data.payload
-        });
+        try {
+          const parsedData = JSON.parse(data);
+          result.push({
+            id: key,
+            ...parsedData
+          });
+        } catch (parseErr) {
+          console.error(`Failed to parse data for ${key}:`, parseErr);
+        }
       }
     }
 
@@ -29,8 +35,11 @@ exports.handler = async function (event, context) {
       body: JSON.stringify({ ok: true, results: result })
     };
   } catch (err) {
-    console.error('get-status error', err);
-    return { statusCode: 500, body: 'Internal Server Error' };
+    console.error('Failed to retrieve status:', err);
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ error: 'Internal Server Error', details: err.message }) 
+    };
   }
 };
 

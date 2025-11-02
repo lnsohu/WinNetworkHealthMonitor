@@ -2,43 +2,79 @@
 const { getStore } = require("@netlify/blobs");
 
 exports.handler = async function (event, context) {
-  const store = getStore({
-    name: "kiosk-status"
-  });
-  // Allow GET to return the in-memory store (ephemeral). POST to store updates.
-  if (event.httpMethod === 'GET') {
-    // Temporarily disabled API key check for testing
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, store: kioskStore })
-    };
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
-
-  // Temporarily disabled API key check for testing
+  console.log('Received request:', event.httpMethod);
+  
   try {
-    const body = JSON.parse(event.body || '{}');
-    const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
-    const now = new Date().toISOString();
+    const store = getStore({
+      name: "kiosk-status"
+    });
+    console.log('KV Store initialized');
 
-    const data = {
-      receivedAt: now,
-      payload: body
-    };
+    // Allow GET to return the current store state
+    if (event.httpMethod === 'GET') {
+      try {
+        const entries = await store.list();
+        const result = [];
+        
+        for (const key of entries) {
+          const data = await store.get(key);
+          if (data) {
+            result.push({
+              id: key,
+              ...data
+            });
+          }
+        }
 
-    await store.set(id, data);
-    console.log(`Stored status for ${id} at ${now}`);
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ok: true, results: result })
+        };
+      } catch (err) {
+        console.error('GET operation failed:', err);
+        return { 
+          statusCode: 500, 
+          body: JSON.stringify({ error: 'Failed to retrieve data', details: err.message }) 
+        };
+      }
+    }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, id, receivedAt: now })
-    };
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: 'Method Not Allowed' };
+    }
+
+    try {
+      const body = JSON.parse(event.body || '{}');
+      const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
+      const now = new Date().toISOString();
+
+      const data = {
+        receivedAt: now,
+        payload: body
+      };
+
+      await store.set(id, JSON.stringify(data));
+      console.log(`Stored status for ${id} at ${now}`);
+
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: true, id, receivedAt: now })
+      };
+    } catch (err) {
+      console.error('Failed to process POST:', err);
+      return { 
+        statusCode: 400, 
+        body: JSON.stringify({ error: 'Bad Request', details: err.message }) 
+      };
+    }
   } catch (err) {
-    console.error('health-report error', err);
-    return { statusCode: 400, body: 'Bad Request' };
+    console.error('Failed to initialize KV store:', err);
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ error: 'Internal Server Error', details: err.message }) 
+    };
   }
 };
 
