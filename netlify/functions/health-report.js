@@ -5,8 +5,10 @@ exports.handler = async function (event, context) {
   console.log('Received request:', event.httpMethod);
   
   try {
+    console.log('Creating KV Store with context:', context);
     const store = getStore({
-      name: "kiosk-status"
+      name: "kiosk-status",
+      siteID: context.site.id
     });
     console.log('KV Store initialized');
 
