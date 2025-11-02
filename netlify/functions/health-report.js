@@ -18,7 +18,7 @@ exports.handler = async function (event, context) {
     };
     
     console.log('Store config:', { ...storeConfig, token: storeConfig.token ? '(set)' : '(not set)' });
-    const store = getStore(storeConfig);
+    const store = await getStore(storeConfig);
     console.log('KV Store initialized');    // Allow GET to return the current store state
     if (event.httpMethod === 'GET') {
       try {
