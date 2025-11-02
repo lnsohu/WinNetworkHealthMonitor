@@ -1,6 +1,6 @@
 ﻿[build]
-  publish = "web"
-  functions = "netlify/functions"
+publish = "web"
+functions = "netlify/functions"
 
 [dev]
-  functions = "netlify/functions"
+functions = "netlify/functions"
