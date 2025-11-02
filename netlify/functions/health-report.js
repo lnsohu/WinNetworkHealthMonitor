@@ -6,6 +6,19 @@ const kioskStore = global.__kioskStatusStore || {};
 global.__kioskStatusStore = kioskStore;
 
 exports.handler = async function (event, context) {
+  // Allow GET to return the in-memory store (ephemeral). POST to store updates.
+  if (event.httpMethod === 'GET') {
+    const apiKey = process.env.API_KEY || 'change-me';
+    const headerKey = (event.headers['x-api-key'] || event.headers['X-Api-Key'] || event.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (!apiKey || headerKey !== apiKey) {
+      return { statusCode: 401, body: 'Unauthorized' };
+    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, store: kioskStore })
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
@@ -27,7 +40,7 @@ exports.handler = async function (event, context) {
       payload: body
     };
 
-    console.log(Stored status for  at );
+    console.log(`Stored status for ${id} at ${now}`);
 
     return {
       statusCode: 200,

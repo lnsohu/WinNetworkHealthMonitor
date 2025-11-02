@@ -3,13 +3,11 @@ param(
     [string]$KioskId,
     
     [Parameter(Mandatory=$true)]
-    [string]$Location,
-    
-    [Parameter(Mandatory=$false)]
-    [string]$NetlifyURL = ""
+    [string]$Location
 )
 
-# End of param block
+# Hardcoded Netlify function endpoint (will not change)
+$NetlifyURL = 'https://winnetworkhealthmonitor.netlify.app/.netlify/functions/health-report'
 
 # 函数：获取核心网络适配器的固定信息
 function Get-CoreNetworkAdapters {
