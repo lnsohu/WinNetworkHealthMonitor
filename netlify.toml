@@ -1,3 +1,4 @@
+# normalized
 [build]
 publish = "web"
 functions = "netlify/functions"
