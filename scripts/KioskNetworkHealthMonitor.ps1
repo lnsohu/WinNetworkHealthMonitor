@@ -6,242 +6,10 @@ param(
     [string]$Location,
     
     [Parameter(Mandatory=$false)]
-    [string]$NetlifyURL = "https://your-app.netlify.app/.netlify/functions/health-report"
+    [string]$NetlifyURL = ""
 )
 
-# 邮件服务配置 - 只保留QQ邮箱
-$EmailConfig = @{
-    QQEnterprise = @{
-        SMTPServer = "smtp.exmail.qq.com"
-        SMTPPort = 465
-        UseSSL = $true
-        FromEmail = "lun@gauto.cc"
-        FromPassword = "ByeMS#33"
-        FromName = "Kiosk Health Monitor"
-    }
-}
-
-# 收件人配置
-$ToEmail = "michael.n.lu@lpstech.com"
-$ToName = "Michael Lu"
-
-# 函数：通过SMTP发送邮件
-function Send-SMTPEmail {
-    param(
-        [string]$Subject,
-        [string]$Body,
-        [bool]$IsHTML = $false
-    )
-    
-    try {
-        $config = $EmailConfig.QQEnterprise
-        
-        # 创建邮件消息对象
-        $mailMessage = New-Object System.Net.Mail.MailMessage
-        $mailMessage.From = New-Object System.Net.Mail.MailAddress($config.FromEmail, $config.FromName)
-        $mailMessage.To.Add("$ToName <$ToEmail>")
-        $mailMessage.Subject = $Subject
-        $mailMessage.Body = $Body
-        $mailMessage.IsBodyHtml = $IsHTML
-        
-        # 创建SMTP客户端
-        $smtpClient = New-Object System.Net.Mail.SmtpClient($config.SMTPServer, $config.SMTPPort)
-        $smtpClient.EnableSsl = $config.UseSSL
-        $smtpClient.Credentials = New-Object System.Net.NetworkCredential($config.FromEmail, $config.FromPassword)
-        
-        # 发送邮件
-        $smtpClient.Send($mailMessage)
-        
-        Write-Host "QQ Enterprise email sent successfully!" -ForegroundColor Green
-        return $true
-    }
-    catch {
-        Write-Warning "Failed to send QQ Enterprise email: $($_.Exception.Message)"
-        return $false
-    }
-    finally {
-        if ($mailMessage) { $mailMessage.Dispose() }
-        if ($smtpClient) { $smtpClient.Dispose() }
-    }
-}
-
-# 函数：生成邮件内容（修复版本）
-function Generate-EmailContent {
-    param([PSCustomObject]$StatusData)
-    
-    # 生成适配器文本
-    $adapterLines = @()
-    foreach ($adapter in $StatusData.CoreAdapters) {
-        $activeIndicator = if ($adapter.IsActiveInternet) { " [ACTIVE]" } else { "" }
-        $adapterLines += "• $($adapter.Type)$activeIndicator - $($adapter.Name) - Status: $($adapter.Status) - IP: $($adapter.IPAddress)"
-    }
-    $adapterText = $adapterLines -join "`n"
-
-    # 生成测试结果文本
-    $testLines = @()
-    foreach ($test in $StatusData.InternetConnectivity.TestResults) {
-        $status = if ($test.Reachable) { "✅ ($($test.Latency)ms)" } else { "❌ Failed" }
-        $testLines += "• $($test.Target): $status"
-    }
-    $testText = $testLines -join "`n"
-
-    # 生成纯文本内容
-    $textBody = @"
-Kiosk Health Report
-===================
-
-Timestamp: $($StatusData.Timestamp)
-Device: $($StatusData.Device)
-Location: $($StatusData.Location)
-
-Internet Connectivity: $(if ($StatusData.InternetConnectivity.HasInternet) { "✅ ONLINE" } else { "❌ OFFLINE" })
-Lowest Latency: $(if ($StatusData.InternetConnectivity.LowestLatency) { "$($StatusData.InternetConnectivity.LowestLatency)ms" } else { "N/A" })
-
-Network Adapters:
-$adapterText
-
-VPN Status: $(if ($StatusData.VPNStatus.Connected) { "✅ CONNECTED" } else { "❌ DISCONNECTED" })
-
-Test Results:
-$testText
-
-Report generated automatically by Kiosk Health Monitor.
-"@
-
-    # 生成HTML表格行
-    $tableRows = ""
-    foreach ($adapter in $StatusData.CoreAdapters) {
-        $rowClass = if ($adapter.IsActiveInternet) { "active-adapter" } else { "" }
-        $statusClass = if ($adapter.Status -eq 'Up') { "status-online" } else { "status-offline" }
-        $activeIcon = if ($adapter.IsActiveInternet) { " 🌐" } else { "" }
-        
-        $tableRows += "<tr class='$rowClass'>
-    <td><strong>$($adapter.Type)</strong>$activeIcon</td>
-    <td>$($adapter.Name)</td>
-    <td><span class='$statusClass'>$($adapter.Status)</span></td>
-    <td>$($adapter.IPAddress)</td>
-    <td>$($adapter.LinkSpeed)</td>
-</tr>"
-    }
-
-    # 生成HTML测试结果
-    $testResultsHTML = ""
-    foreach ($test in $StatusData.InternetConnectivity.TestResults) {
-        $statusHTML = if ($test.Reachable) { 
-            "<span class='status-online'>✅ ($($test.Latency)ms)</span>" 
-        } else { 
-            "<span class='status-offline'>❌ Failed</span>" 
-        }
-        $testResultsHTML += "<li>$($test.Target): $statusHTML</li>"
-    }
-
-    # 修复三元运算符语法 - 使用传统的if-else
-    $internetStatusClass = if ($StatusData.InternetConnectivity.HasInternet) { "status-online" } else { "status-offline" }
-    $internetStatusText = if ($StatusData.InternetConnectivity.HasInternet) { "✅ ONLINE" } else { "❌ OFFLINE" }
-    $vpnStatusClass = if ($StatusData.VPNStatus.Connected) { "status-online" } else { "status-offline" }
-    $vpnStatusText = if ($StatusData.VPNStatus.Connected) { "✅ CONNECTED" } else { "❌ DISCONNECTED" }
-
-    # 生成HTML内容
-    $htmlBody = @"
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { background: #f0f0f0; padding: 15px; border-radius: 5px; }
-        .status-online { color: #28a745; font-weight: bold; }
-        .status-offline { color: #dc3545; font-weight: bold; }
-        .adapter-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        .adapter-table th, .adapter-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .adapter-table th { background-color: #f2f2f2; }
-        .active-adapter { background-color: #e8f5e8; }
-        .test-results { margin: 15px 0; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h2>Kiosk Health Report</h2>
-        <p><strong>Timestamp:</strong> $($StatusData.Timestamp)</p>
-        <p><strong>Device:</strong> $($StatusData.Device)</p>
-        <p><strong>Location:</strong> $($StatusData.Location)</p>
-    </div>
-
-    <div class="status-section">
-        <h3>Internet Connectivity</h3>
-        <p><span class="$internetStatusClass">
-            $internetStatusText
-        </span></p>
-        <p><strong>Lowest Latency:</strong> $(if ($StatusData.InternetConnectivity.LowestLatency) { "$($StatusData.InternetConnectivity.LowestLatency)ms" } else { "N/A" })</p>
-    </div>
-
-    <div class="adapter-section">
-        <h3>Network Adapters</h3>
-        <table class="adapter-table">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>IP Address</th>
-                    <th>Link Speed</th>
-                </tr>
-            </thead>
-            <tbody>
-                $tableRows
-            </tbody>
-        </table>
-    </div>
-
-    <div class="vpn-section">
-        <h3>VPN Status</h3>
-        <p><span class="$vpnStatusClass">
-            $vpnStatusText
-        </span></p>
-    </div>
-
-    <div class="test-results">
-        <h3>Connectivity Test Results</h3>
-        <ul>
-            $testResultsHTML
-        </ul>
-    </div>
-
-    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        <p>Report generated automatically by Kiosk Health Monitor.</p>
-    </div>
-</body>
-</html>
-"@
-
-    return @{
-        TextBody = $textBody
-        HTMLBody = $htmlBody
-    }
-}
-
-# 函数：发送邮件报告
-function Send-EmailReport {
-    param(
-        [PSCustomObject]$StatusData
-    )
-    
-    # 生成邮件内容
-    $emailContent = Generate-EmailContent -StatusData $StatusData
-    
-    # 生成邮件主题
-    $statusIndicator = if ($StatusData.InternetConnectivity.HasInternet -and $StatusData.VPNStatus.Connected) { 
-        "✅ HEALTHY" 
-    } elseif (-not $StatusData.InternetConnectivity.HasInternet) { 
-        "❌ NO INTERNET" 
-    } else { 
-        "⚠️ VPN ISSUE" 
-    }
-    
-    $emailSubject = "Kiosk Health Report - $($StatusData.Device) - $statusIndicator - $($StatusData.Timestamp)"
-    
-    Write-Host "Sending email report via QQ Enterprise Email..." -ForegroundColor Yellow
-    return Send-SMTPEmail -Subject $emailSubject -Body $emailContent.HTMLBody -IsHTML $true
-}
+# End of param block
 
 # 函数：获取核心网络适配器的固定信息
 function Get-CoreNetworkAdapters {
@@ -548,8 +316,16 @@ function Send-HealthReport {
             "Content-Type" = "application/json"
         }
 
-        $response = Invoke-RestMethod -Uri $EndpointURL -Method Post -Body $jsonData -Headers $headers
+        Write-Host "--- Sending JSON payload to $EndpointURL ---" -ForegroundColor Cyan
+        Write-Host $jsonData
+        $response = Invoke-RestMethod -Uri $EndpointURL -Method Post -Body $jsonData -Headers $headers -TimeoutSec 30
         
+        Write-Host "--- Response from endpoint ---" -ForegroundColor Cyan
+        if ($response -is [System.String]) {
+            Write-Host $response
+        } else {
+            $response | ConvertTo-Json -Depth 5
+        }
         Write-Host "Status report sent successfully: $($HealthData.Timestamp)" -ForegroundColor Green
         return $true
     }
@@ -629,7 +405,6 @@ function Show-DetailedStatus {
 # 主执行逻辑
 try {
     Write-Host "Starting Kiosk Network Health Monitor..." -ForegroundColor Yellow
-    Write-Host "Using QQ Enterprise Email: lun@gauto.cc" -ForegroundColor Cyan
     
     # 获取详细网络状态
     $networkStatus = Get-DetailedNetworkStatus -ComputerId $KioskId -SiteLocation $Location
@@ -637,22 +412,14 @@ try {
     # 在控制台显示状态
     Show-DetailedStatus -StatusData $networkStatus
     
-    # 发送邮件报告
-    Write-Host "Sending email report to $ToEmail..." -ForegroundColor Yellow
-    $emailSuccess = Send-EmailReport -StatusData $networkStatus
-    
-    if ($emailSuccess) {
-        Write-Host "Email report sent successfully to $ToEmail" -ForegroundColor Green
-    } else {
-        Write-Warning "Failed to send email report"
-    }
-    
-    # 上报状态到Netlify（如果配置了URL）
-    if ($NetlifyURL -and $NetlifyURL -ne "https://your-app.netlify.app/.netlify/functions/health-report") {
+    # 上报状态到 Netlify（如果提供了 URL）
+    if ($NetlifyURL -and $NetlifyURL.Trim() -ne "") {
         Write-Host "Sending report to Netlify..." -ForegroundColor Yellow
         $reportSuccess = Send-HealthReport -HealthData $networkStatus -EndpointURL $NetlifyURL
         if ($reportSuccess) {
             Write-Host "Health report sent to Netlify successfully" -ForegroundColor Green
+        } else {
+            Write-Warning "Failed to send health report to Netlify"
         }
     } else {
         Write-Warning "Netlify URL not configured, skipping report"
