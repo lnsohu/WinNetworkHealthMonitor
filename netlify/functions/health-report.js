@@ -1,25 +1,10 @@
-﻿// Netlify Function: Accepts POST from kiosks and stores last-seen status in KV Store
+﻿// Netlify Function: Accepts POST from kiosks and stores their latest status
 const { getStore } = require("@netlify/blobs");
 
+let statusCache = {};
+
 exports.handler = async function (event, context) {
-    console.log('Received request:', event.httpMethod);
-    console.log('Environment:', {
-      SITE_ID: process.env.SITE_ID,
-      NETLIFY_API_TOKEN: process.env.NETLIFY_API_TOKEN ? '(set)' : '(not set)',
-      NODE_ENV: process.env.NODE_ENV
-    });
-  
-  try {
-    // Note: In production, these values are automatically provided by Netlify
-    const storeConfig = {
-      name: "kiosk-status",
-      token: process.env.NETLIFY_API_TOKEN, // Always include the token
-      siteID: process.env.SITE_ID || context.site?.id || "winnetworkhealthmonitor"
-    };
-    
-    console.log('Store config:', { ...storeConfig, token: storeConfig.token ? '(set)' : '(not set)' });
-    const store = await getStore(storeConfig);
-    console.log('KV Store initialized');    // Allow GET to return the current store state
+  // GET request returns the in-memory latest status of all devices
     if (event.httpMethod === 'GET') {
       try {
         const entries = await store.list();
