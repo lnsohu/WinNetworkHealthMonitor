@@ -12,14 +12,9 @@ exports.handler = async function (event, context) {
   try {
     // Note: In production, these values are automatically provided by Netlify
     const storeConfig = {
-      name: "kiosk-status"
+      name: "kiosk-status",
+      token: process.env.NETLIFY_API_TOKEN // Always include the token
     };
-    
-    // Only add these if we're not in the Netlify environment
-    if (!process.env.NETLIFY) {
-      storeConfig.siteID = process.env.SITE_ID || "winnetworkhealthmonitor";
-      storeConfig.token = process.env.NETLIFY_API_TOKEN;
-    }
     
     console.log('Store config:', { ...storeConfig, token: storeConfig.token ? '(set)' : '(not set)' });
     const store = getStore(storeConfig);
