@@ -29,9 +29,14 @@ exports.handler = async function (event, context) {
     };
   } catch (err) {
     console.error('Failed to retrieve status:', err);
+    console.log('Error stack:', err.stack);
     return { 
       statusCode: 500, 
-      body: JSON.stringify({ error: 'Internal Server Error', details: err.message }) 
+      body: JSON.stringify({ 
+        error: 'Internal Server Error', 
+        message: err.message,
+        stack: err.stack
+      }) 
     };
   }
 };

@@ -57,16 +57,26 @@ exports.handler = async function (event, context) {
       };
     } catch (err) {
       console.error('Failed to process POST:', err);
+      console.log('Error stack:', err.stack);
       return { 
         statusCode: 400, 
-        body: JSON.stringify({ error: 'Bad Request', details: err.message }) 
+        body: JSON.stringify({ 
+          error: 'Bad Request', 
+          message: err.message,
+          stack: err.stack 
+        }) 
       };
     }
   } catch (err) {
-    console.error('Failed to initialize KV store:', err);
+    console.error('Failed to initialize or use KV store:', err);
+    console.log('Error stack:', err.stack);
     return { 
       statusCode: 500, 
-      body: JSON.stringify({ error: 'Internal Server Error', details: err.message }) 
+      body: JSON.stringify({ 
+        error: 'Internal Server Error', 
+        message: err.message,
+        stack: err.stack
+      }) 
     };
   }
 };
