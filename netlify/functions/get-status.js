@@ -5,8 +5,10 @@ exports.handler = async function (event, context) {
   console.log('Received status request');
   
   try {
+    // Note: In production, these values are automatically provided by Netlify
     const store = getStore({
       name: "kiosk-status",
+      siteID: process.env.SITE_ID || "winnetworkhealthmonitor",
       token: process.env.NETLIFY_API_TOKEN
     });
     console.log('KV Store initialized');
