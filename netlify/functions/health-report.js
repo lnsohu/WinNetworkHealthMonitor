@@ -58,7 +58,11 @@ exports.handler = async function (event, context) {
       const id = body.Device || body.DeviceId || body.DeviceID || body.kioskId || 'unknown';
       const now = new Date().toISOString();
 
-      await store.set(id, body);
+      const data = {
+        receivedAt: now,
+        payload: body
+      };
+      await store.set(id, JSON.stringify(data));
       console.log(`Stored status for ${id} at ${now}`);
 
       return {
