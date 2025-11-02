@@ -5,7 +5,10 @@ exports.handler = async function (event, context) {
   console.log('Received request:', event.httpMethod);
   
   try {
-    const store = getStore("kiosk-status");
+    const store = getStore({
+      name: "kiosk-status",
+      token: process.env.NETLIFY_API_TOKEN
+    });
     console.log('KV Store initialized');
 
     // Allow GET to return the current store state
