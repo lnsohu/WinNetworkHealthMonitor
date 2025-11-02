@@ -19,14 +19,15 @@ exports.handler = async function (event, context) {
     
     console.log('Store config:', { ...storeConfig, token: storeConfig.token ? '(set)' : '(not set)' });
     const store = getStore(storeConfig);
-    console.log('KV Store initialized');    const entries = await store.listKeys();
-    console.log('Found entries:', entries);
+    console.log('KV Store initialized');    const list = await store.list();
+    console.log('Found entries:', list);
     
     const result = [];
-    for (const key of entries) {
+    for (const { key } of list) {
       const data = await store.get(key);
       if (data) {
-        const parsedData = JSON.parse(await data.text());
+        const text = await data.text();
+        const parsedData = JSON.parse(text);
         result.push({
           id: key,
           ...parsedData
