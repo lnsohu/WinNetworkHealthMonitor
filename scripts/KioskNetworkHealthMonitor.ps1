@@ -3,11 +3,42 @@ param(
     [string]$KioskId,
     
     [Parameter(Mandatory=$true)]
-    [string]$Location
+    [string]$Location,
+    
+    [Parameter(Mandatory=$false)]
+    [ValidateRange(1,5)]
+    [int]$ServerID = 1
 )
 
-# Hardcoded Netlify function endpoint (will not change)
-$NetlifyURL = 'https://winnetworkhealthmonitor.netlify.app/.netlify/functions/health-report'
+# Email configuration
+$EmailConfig = @{
+    SmtpServer = "smtp.sina.cn"
+    Port = 587
+    UseSsl = $true
+    From = "michael_lou@sina.cn"
+    To = "michael.n.lu@lpstech.com"
+    SmtpUser = "michael_lou@sina.cn"
+    SmtpPassword = "836a98b32fa05e3d"
+}
+
+# 函数：根据ServerID获取目标服务器
+function Get-TestTargets {
+    param([int]$ServerID)
+    
+    $baseTargets = @("8.8.8.8", "1.1.1.1")
+    
+    # 根据ServerID添加对应的域名
+    $domainTarget = switch ($ServerID) {
+        1 { "avatar.sightai.tech" }
+        2 { "avatar2.sightai.tech" }
+        3 { "avatar3.sightai.tech" }
+        4 { "avatar4.sightai.tech" }
+        5 { "avatar5.sightai.tech" }
+        default { "avatar.sightai.tech" }
+    }
+    
+    return $baseTargets + $domainTarget
+}
 
 # 函数：获取核心网络适配器的固定信息
 function Get-CoreNetworkAdapters {
@@ -125,7 +156,8 @@ function Get-CoreNetworkAdapters {
 function Get-DetailedNetworkStatus {
     param(
         [string]$ComputerId,
-        [string]$SiteLocation
+        [string]$SiteLocation,
+        [int]$ServerID
     )
 
     try {
@@ -154,8 +186,8 @@ function Get-DetailedNetworkStatus {
         } | Select-Object -First 1
 
         # 方法2：测试互联网连通性并测量延迟
+        $TestTargets = Get-TestTargets -ServerID $ServerID
         $InternetTestResults = @()
-        $TestTargets = @("8.8.8.8", "1.1.1.1", "www.microsoft.com")
         $HasInternet = $false
         $LowestLatency = $null
         
@@ -261,6 +293,7 @@ function Get-DetailedNetworkStatus {
             Timestamp        = $HKTime.ToString("yyyy-MM-dd HH:mm:ss")
             Device           = $ComputerId
             Location         = $SiteLocation
+            ServerID         = $ServerID
             CoreAdapters     = $CoreAdapters
             ActiveInternetAdapter = $ActiveInternetAdapter
             InternetConnectivity = [PSCustomObject]@{
@@ -283,6 +316,7 @@ function Get-DetailedNetworkStatus {
             Timestamp        = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
             Device           = $ComputerId
             Location         = $SiteLocation
+            ServerID         = $ServerID
             CoreAdapters     = @()
             ActiveInternetAdapter = $null
             InternetConnectivity = [PSCustomObject]@{
@@ -300,35 +334,353 @@ function Get-DetailedNetworkStatus {
     }
 }
 
-# 函数：上报状态到Netlify
-function Send-HealthReport {
+# 函数：发送邮件报告
+function Send-EmailReport {
     param(
-        [PSCustomObject]$HealthData,
-        [string]$EndpointURL
+        [PSCustomObject]$NetworkStatus
     )
 
     try {
-        $jsonData = $HealthData | ConvertTo-Json -Depth 5 -Compress
+        # 创建邮件主题
+        $emailSubject = "[$($NetworkStatus.Device)][$($NetworkStatus.Location)] - Network Status Report"
         
-        $headers = @{
-            "Content-Type" = "application/json"
+        # 创建纯英文的HTML邮件内容，避免编码问题
+        $htmlBody = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Status Report</title>
+    <style>
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+        body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 10px;
+        }
+        .container {
+            max-width: 100%;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px 15px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 18px;
+            margin: 0;
+            font-weight: 600;
+        }
+        .header .subtitle {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        .content {
+            padding: 15px;
+        }
+        .section {
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .section-header {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        .section-content {
+            padding: 15px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin: 2px;
+        }
+        .status-up { background: #d4edda; color: #155724; }
+        .status-down { background: #f8d7da; color: #721c24; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .metric-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .metric-card {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        .metric-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 5px 0;
+        }
+        .metric-label {
+            font-size: 11px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .test-result {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f3f4;
+        }
+        .test-result:last-child {
+            border-bottom: none;
+        }
+        .adapter-item {
+            background: #f8f9fa;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border-left: 4px solid #95a5a6;
+        }
+        .adapter-active {
+            border-left-color: #27ae60;
+            background: #e8f5e8;
+        }
+        .adapter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .adapter-type {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .adapter-details {
+            font-size: 12px;
+            color: #666;
+        }
+        .adapter-detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        .health-summary {
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+            margin: 15px 0;
+            gap: 8px;
+        }
+        .health-item {
+            flex: 1;
+            padding: 12px 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .health-value {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .health-good { color: #27ae60; }
+        .health-bad { color: #e74c3c; }
+        .health-warning { color: #f39c12; }
+        .footer {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 11px;
+            border-top: 1px solid #e0e0e0;
+        }
+        @media (max-width: 480px) {
+            .health-summary {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .health-item {
+                margin-bottom: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Network Status Report</h1>
+            <div class="subtitle">$($NetworkStatus.Timestamp) | Device: $($NetworkStatus.Device) | Location: $($NetworkStatus.Location)</div>
+        </div>
+        
+        <div class="content">
+            <!-- Health Summary -->
+            <div class="health-summary">
+                <div class="health-item">
+                    <div class="metric-label">Internet</div>
+                    <div class="health-value $(if($NetworkStatus.InternetConnectivity.HasInternet) { 'health-good' } else { 'health-bad' })">
+                        $(if($NetworkStatus.InternetConnectivity.HasInternet) { 'ONLINE' } else { 'OFFLINE' })
+                    </div>
+                </div>
+                <div class="health-item">
+                    <div class="metric-label">VPN</div>
+                    <div class="health-value $(if($NetworkStatus.VPNStatus.Connected) { 'health-good' } else { 'health-warning' })">
+                        $(if($NetworkStatus.VPNStatus.Connected) { 'CONNECTED' } else { 'DISCONNECTED' })
+                    </div>
+                </div>
+                <div class="health-item">
+                    <div class="metric-label">Latency</div>
+                    <div class="health-value $(if($NetworkStatus.InternetConnectivity.LowestLatency -and $NetworkStatus.InternetConnectivity.LowestLatency -lt 50) { 'health-good' } elseif ($NetworkStatus.InternetConnectivity.LowestLatency -lt 100) { 'health-warning' } else { 'health-bad' })">
+                        $(if($NetworkStatus.InternetConnectivity.LowestLatency) { "$($NetworkStatus.InternetConnectivity.LowestLatency)ms" } else { 'N/A' })
+                    </div>
+                </div>
+            </div>
+
+            <!-- Internet Connectivity -->
+            <div class="section">
+                <div class="section-header">Connectivity Test (Server ID: $($NetworkStatus.ServerID))</div>
+                <div class="section-content">
+"@
+
+        # 添加互联网测试结果
+        foreach ($test in $NetworkStatus.InternetConnectivity.TestResults) {
+            $statusIcon = if ($test.Reachable) { "✅" } else { "❌" }
+            $latencyDisplay = if ($test.Reachable) { "$($test.Latency)ms" } else { "Timeout" }
+            $htmlBody += @"
+                    <div class="test-result">
+                        <div>
+                            <strong>$($test.Target)</strong>
+                            <span class="status-badge $(if($test.Reachable) { 'status-up' } else { 'status-down' })">$statusIcon $($test.Reachable)</span>
+                        </div>
+                        <div>$latencyDisplay</div>
+                    </div>
+"@
         }
 
-        Write-Host "--- Sending JSON payload to $EndpointURL ---" -ForegroundColor Cyan
-        Write-Host $jsonData
-        $response = Invoke-RestMethod -Uri $EndpointURL -Method Post -Body $jsonData -Headers $headers -TimeoutSec 30
-        
-        Write-Host "--- Response from endpoint ---" -ForegroundColor Cyan
-        if ($response -is [System.String]) {
-            Write-Host $response
-        } else {
-            $response | ConvertTo-Json -Depth 5
+        $htmlBody += @"
+                </div>
+            </div>
+
+            <!-- Network Adapters -->
+            <div class="section">
+                <div class="section-header">Network Adapters</div>
+                <div class="section-content">
+"@
+
+        # 添加网络适配器信息（移动端友好）
+        foreach ($adapter in $NetworkStatus.CoreAdapters) {
+            $statusClass = if ($adapter.Status -eq 'Up') { 'status-up' } else { 'status-down' }
+            $statusText = if ($adapter.Status -eq 'Up') { 'UP' } else { 'DOWN' }
+            $adapterClass = if ($adapter.IsActiveInternet) { 'adapter-item adapter-active' } else { 'adapter-item' }
+            $activeIndicator = if ($adapter.IsActiveInternet) { ' ★' } else { '' }
+            
+            $htmlBody += @"
+                    <div class="$adapterClass">
+                        <div class="adapter-header">
+                            <span class="adapter-type">$($adapter.Type)$activeIndicator</span>
+                            <span class="status-badge $statusClass">$statusText</span>
+                        </div>
+                        <div class="adapter-details">
+                            <div class="adapter-detail-row">
+                                <span>Name:</span>
+                                <span>$($adapter.Name)</span>
+                            </div>
+                            <div class="adapter-detail-row">
+                                <span>IP Address:</span>
+                                <span>$($adapter.IPAddress)</span>
+                            </div>
+                            <div class="adapter-detail-row">
+                                <span>Link Speed:</span>
+                                <span>$($adapter.LinkSpeed)</span>
+                            </div>
+                        </div>
+                    </div>
+"@
         }
-        Write-Host "Status report sent successfully: $($HealthData.Timestamp)" -ForegroundColor Green
+
+        $htmlBody += @"
+                </div>
+            </div>
+
+            <!-- VPN Status -->
+            <div class="section">
+                <div class="section-header">VPN Connection</div>
+                <div class="section-content">
+                    <div class="metric-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">VPN Status</div>
+                            <div class="metric-value $(if($NetworkStatus.VPNStatus.Connected) { 'health-good' } else { 'health-warning' })">
+                                $(if($NetworkStatus.VPNStatus.Connected) { 'CONNECTED' } else { 'DISCONNECTED' })
+                            </div>
+                        </div>
+"@
+
+        if ($NetworkStatus.VPNStatus.Connected -and $NetworkStatus.VPNStatus.AdapterInfo) {
+            $htmlBody += @"
+                        <div class="metric-card">
+                            <div class="metric-label">VPN Adapter</div>
+                            <div class="metric-value">$($NetworkStatus.VPNStatus.AdapterInfo.Name)</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">VPN IP</div>
+                            <div class="metric-value">$($NetworkStatus.VPNStatus.AdapterInfo.IPAddress)</div>
+                        </div>
+"@
+        }
+
+        $htmlBody += @"
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Generated by Network Health Monitor | $((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss")) UTC
+        </div>
+    </div>
+</body>
+</html>
+"@
+
+        # 发送邮件
+        $mailParams = @{
+            From = $EmailConfig.From
+            To = $EmailConfig.To
+            Subject = $emailSubject
+            Body = $htmlBody
+            SmtpServer = $EmailConfig.SmtpServer
+            Port = $EmailConfig.Port
+            UseSsl = $EmailConfig.UseSsl
+            Credential = New-Object System.Management.Automation.PSCredential(
+                $EmailConfig.SmtpUser, 
+                (ConvertTo-SecureString $EmailConfig.SmtpPassword -AsPlainText -Force)
+            )
+            BodyAsHtml = $true
+            Encoding = [System.Text.Encoding]::UTF8
+        }
+        
+        Send-MailMessage @mailParams
+        Write-Host "Email report sent successfully to $($EmailConfig.To)" -ForegroundColor Green
         return $true
     }
     catch {
-        Write-Warning "Failed to send status report: $_"
+        Write-Error "Failed to send email report: $($_.Exception.Message)"
         return $false
     }
 }
@@ -341,6 +693,7 @@ function Show-DetailedStatus {
     Write-Host "Time: $($StatusData.Timestamp) (Hong Kong Time)"
     Write-Host "Device: $($StatusData.Device)"
     Write-Host "Location: $($StatusData.Location)"
+    Write-Host "Server ID: $($StatusData.ServerID)"
     Write-Host ""
     
     # 显示互联网连通性测试结果
@@ -403,24 +756,21 @@ function Show-DetailedStatus {
 # 主执行逻辑
 try {
     Write-Host "Starting Kiosk Network Health Monitor..." -ForegroundColor Yellow
+    Write-Host "Server ID: $ServerID" -ForegroundColor Yellow
     
     # 获取详细网络状态
-    $networkStatus = Get-DetailedNetworkStatus -ComputerId $KioskId -SiteLocation $Location
+    $networkStatus = Get-DetailedNetworkStatus -ComputerId $KioskId -SiteLocation $Location -ServerID $ServerID
     
     # 在控制台显示状态
     Show-DetailedStatus -StatusData $networkStatus
     
-    # 上报状态到 Netlify（如果提供了 URL）
-    if ($NetlifyURL -and $NetlifyURL.Trim() -ne "") {
-        Write-Host "Sending report to Netlify..." -ForegroundColor Yellow
-        $reportSuccess = Send-HealthReport -HealthData $networkStatus -EndpointURL $NetlifyURL
-        if ($reportSuccess) {
-            Write-Host "Health report sent to Netlify successfully" -ForegroundColor Green
-        } else {
-            Write-Warning "Failed to send health report to Netlify"
-        }
+    # 发送邮件报告
+    Write-Host "Sending email report..." -ForegroundColor Yellow
+    $emailSuccess = Send-EmailReport -NetworkStatus $networkStatus
+    if ($emailSuccess) {
+        Write-Host "Email report sent successfully" -ForegroundColor Green
     } else {
-        Write-Warning "Netlify URL not configured, skipping report"
+        Write-Warning "Failed to send email report"
     }
     
     # 返回退出代码
