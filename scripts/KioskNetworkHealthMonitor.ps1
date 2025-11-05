@@ -16,7 +16,7 @@ $EmailConfig = @{
     Port = 587
     UseSsl = $true
     From = "michael_lou@sina.cn"
-    To = "michael.n.lu@lpstech.com"
+    To = @("michael.n.lu@lpstech.com", "wilson.kh.ma@lpstech.com")
     SmtpUser = "michael_lou@sina.cn"
     SmtpPassword = "836a98b32fa05e3d"
 }
@@ -68,11 +68,13 @@ function Get-CoreNetworkAdapters {
     
     # 2. 查找无线网卡
     $WirelessAdapters = Get-NetAdapter | Where-Object { 
-        $_.InterfaceDescription -like "*Wireless*" -or 
-        $_.InterfaceDescription -like "*Wi-Fi*" -or 
-        $_.InterfaceDescription -like "*WLAN*" -or 
-        $_.InterfaceDescription -like "*802.11*" -or
-        $_.Name -eq "Wi-Fi"
+        ($_.InterfaceDescription -like "*Wireless*" -or 
+         $_.InterfaceDescription -like "*Wi-Fi*" -or 
+         $_.InterfaceDescription -like "*WLAN*" -or 
+         $_.InterfaceDescription -like "*802.11*" -or
+         $_.Name -eq "Wi-Fi") -and
+        $_.InterfaceDescription -notlike "*VMware*" -and
+        $_.InterfaceDescription -notlike "*Virtual*"
     } | Sort-Object Status -Descending | Select-Object -First 1
     
     # 如果没有找到无线网卡，创建一个虚拟条目
@@ -90,11 +92,16 @@ function Get-CoreNetworkAdapters {
     $OpenVPNAdapters = Get-NetAdapter | Where-Object { 
         ($_.InterfaceDescription -like "*TAP-Windows*" -or 
          $_.InterfaceDescription -like "*TUN*" -or
-         $_.Name -like "*OpenVPN*")
+         $_.Name -like "*OpenVPN*") -and
+        $_.InterfaceDescription -notlike "*VMware*" -and
+        $_.InterfaceDescription -notlike "*Virtual*"
     } | Sort-Object Status -Descending | Select-Object -First 1
     
     # 组装核心适配器列表
-    $adapters = @($WiredAdapters, $WirelessAdapters, $OpenVPNAdapters)
+    $adapters = @()
+    if ($WiredAdapters) { $adapters += $WiredAdapters }
+    if ($WirelessAdapters) { $adapters += $WirelessAdapters }
+    if ($OpenVPNAdapters) { $adapters += $OpenVPNAdapters }
     
     $CoreAdapterDetails = @()
     foreach ($adapter in $adapters) {
@@ -577,9 +584,10 @@ function Send-EmailReport {
                 <div class="section-content">
 "@
 
-        # 添加互联网测试结果
+        # 添加互联网测试结果 - 使用文本符号避免乱码
         foreach ($test in $NetworkStatus.InternetConnectivity.TestResults) {
-            $statusIcon = if ($test.Reachable) { "✅" } else { "❌" }
+            # 使用文本符号替代Unicode符号
+            $statusIcon = if ($test.Reachable) { "[OK]" } else { "[FAIL]" }
             $latencyDisplay = if ($test.Reachable) { "$($test.Latency)ms" } else { "Timeout" }
             $htmlBody += @"
                     <div class="test-result">
@@ -602,12 +610,13 @@ function Send-EmailReport {
                 <div class="section-content">
 "@
 
-        # 添加网络适配器信息（移动端友好），包含跃点数和DNS信息
+        # 添加网络适配器信息 - 使用文本符号避免乱码
         foreach ($adapter in $NetworkStatus.CoreAdapters) {
             $statusClass = if ($adapter.Status -eq 'Up') { 'status-up' } else { 'status-down' }
+            # 使用文本状态替代Unicode符号
             $statusText = if ($adapter.Status -eq 'Up') { 'UP' } else { 'DOWN' }
             $adapterClass = if ($adapter.IsActiveInternet) { 'adapter-item adapter-active' } else { 'adapter-item' }
-            $activeIndicator = if ($adapter.IsActiveInternet) { ' ★' } else { '' }
+            $activeIndicator = if ($adapter.IsActiveInternet) { ' [ACTIVE]' } else { '' }
             
             $htmlBody += @"
                     <div class="$adapterClass">
