@@ -49,7 +49,6 @@ function Get-CoreNetworkAdapters {
     $WiredAdapters = Get-NetAdapter | Where-Object { 
         ($_.InterfaceDescription -like "*Ethernet*" -or 
          $_.InterfaceDescription -like "*GbE*" -or 
-         $_.InterfaceDescription -like "*PCIe*" -or
          $_.Name -eq "Ethernet") -and
         $_.InterfaceDescription -notlike "*VMware*" -and
         $_.InterfaceDescription -notlike "*Virtual*"
@@ -131,7 +130,7 @@ function Get-CoreNetworkAdapters {
                 "WIFI"
             } elseif ($adapter.InterfaceDescription -like "*Ethernet*" -or 
                      $adapter.InterfaceDescription -like "*GbE*" -or 
-                     $adapter.InterfaceDescription -like "*PCIe*") {
+                     $adapter.InterfaceDescription -like "*GbE*") {
                 "WIRED"
             } elseif ($adapter.InterfaceDescription -like "*TAP-Windows*" -or 
                      $adapter.InterfaceDescription -like "*TUN*" -or
